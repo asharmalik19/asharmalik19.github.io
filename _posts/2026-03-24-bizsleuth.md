@@ -4,20 +4,127 @@ title:  "Bizsleuth"
 tags: [ai, web-scraping]
 ---
 
-Bizsleuth is a solution to a real problem I saw in B2B businesses. I saw that the sales and marketing teams get potential leads data from different sources and directories like `Google Map` but that information is often incomplete for targeted campaigns and lack essential information for lead-generation such as email address and highly useful information such as the business owner name. They often have to manually open each website url to find this missing info. This takes up huge time and effort. So I build bizsleuth to solve this problem.
+Bizsleuth is a solution to a real problem I saw in B2B businesses. I saw that the sales and marketing teams get potential leads data from different sources and directories like `Google Maps` but that information is often incomplete for targeted campaigns and lack essential information for lead-generation such as email address and highly useful information such as the business owner name. They often have to manually open each website url to find this missing info. This takes up huge time and effort. So I build bizsleuth to solve this problem.
 
 Bizsleuth is an AI-powered lead-generation and lead-enrichment tool which scrapes key information about a business from its website's content. 
 
 Bizsleuth consists of a crawler that crawls the domain and internal pages upto maximum 10 pages, gathers the text content from all these pages and then use AI to parse key info. This is why its important to feed the homepage url as an input instead of some random page url of the domain so that the crawler can crawl the navigation pages instead of some random links.  
 
-Initially when I built the solution, I didn't think of actorising the solution but when I saw its impact, I saw a common pain point for B2B businesses and a gap in the market. I couldn't find any tool in the market that can extract commonly required information for lead-generation using the power of AI to get the information reliably. The existing solutions were using regular expressions or techniques which can result in lower accuracy, higher false positives and false negatives. But nothing good ever happens without challenges, right. So here are some challenges I faced
+Initially when I built the solution, I didn't think of actorising the solution but when I saw its impact, I saw a common pain point for B2B businesses and a gap in the market. I couldn't find any tool in the market that can extract commonly required information for lead-generation using the power of AI to get the information reliably. The existing solutions were using regular expressions or techniques which can result in lower accuracy, higher false positives and false negatives. But nothing good ever happens without challenges, right? So here are some challenges I faced
 
 #### Challenges
 - AI context: 
     Crawling websites and then using AI to parse required information seems intuitive but the website content across multiple pages can exceed the maximum context length. To solve this problem, I used an open source library by *Zyte* called `html_text` to extract clean text from html source pages and used truncation mechanism to ensure that the context doesn't exceed a limit of 10000 tokens for any given website. 10000 is not some magic number but I found 10k to be an average of a sample of business websites (about 1k websites) in my case where I was dealing with fitness. But regardless of type of business, 10k tokens represent a good amount of text content for any type of business if not exceed it will most likely contain the information we are looking for.
 
-- AI costs: (modern solutions incur modern costs)
-    AI API is not free for a developer like me (and you unless you are someone who works at one of the AI labs replacing developers). Cleaning the website content and truncating the text reduced 
-    
+- AI cost: (modern solutions incur modern costs)
+    AI API is not free for a developer like me (and you unless you are someone who works at one of the AI labs replacing developers). Cleaning the website content and truncating the text reduced not only helped manage the context but also reduce the cost of AI API. With 10k tokens per website, you get about $1 with gemini-flash-lite model for 1000 websites which is pretty inexpensive. 
+
+- Apify platform cost:
+    Initially I used a browser-based crawler instead of simple `httpcrawler` to crawl which was very slow. Apify charges per Compute Units (CU) that your actor consumes. The more time or memory your actor takes, the more your actor costs. Using browser can be beneficial for some websites which displays our required information after javascript rendering but it wasn't worth the time it takes and the costs it incurs. So I switched to simple `httpcrawler` to crawl the business websites. 
+
+- Concurrency control:
+    The actor processes given websites asyncronously. It was ok on a small input but when a large input was given like (1000+ urls), then the actor would get into Out Of Memory (OOM) issue because firing up so many tasks at once is a guaranteed recipe for exhausting the available resources. I implemented a concurrency control mechanism using `asyncio.Semaphore` to process 10 websites at a time.
+
+I wanted my actor to be such that it is achieves the task in a reasonable amount of time and cost. This is why I decided to use `httpcrawler`, put a cap on tokens per website so that I have a good idea of AI usage and costs. It takes my actor 25-30 mins to crawl and process 1000 websites which is reasonable given the fact that the websites are crawled deeply and processed through AI. 
+
+Setting pricing of the tool is challenging if its your first SaaS tool. You need to price the tool in a way that covers all the costs as well as make some profit while also keeping it affordable for the user. After some research on the Apify platform and some research on the web about the type of tool I was providing, I found that $5/1000 urls would be a good starting point because that covers all my cost and makes me a little profit and it is also affordable for the end user. If it turns out to be expensive, then I can tweak the plan to make it cheaper. Reducing the price is easy, increasing the price is not easy because you can do that only once a month on Apify and it will take effect after 14 days. Also, an existing customer doesn't like a price increase and may churn but reducing the price will make him only happier. 
+
+But how do you actually charge a user for your actor. Apify provides a few different ways to monetize your actor and you can read more about them [here](https://docs.apify.com/academy/actor-marketing-playbook/store-basics/how-actor-monetization-works). I have personally used *PPE* and I like this method. In *PPE* method, you create an event and whenever that event happens, user will be charged the amount you have set. For example, you can set `request_url` event which charges the user everytime your actor makes an `http_request` to a url. Apify has also made it very easy to implement. All you have to do is to use `Actor.Charge()` method in your code to charge for the event. You can read more about this [here](https://docs.apify.com/platform/actors/publishing/monetize/pay-per-event)   
+
+I first built my solution and used it locally. Then I actorized my code and published on Apify. Apify docs are pretty comprehensive about explaining how to [build your actor](https://docs.apify.com/academy/getting-started/creating-actors) but configuring your input and output can get confusing if this is your first actor. Apify has made everything so accessible by bringing AI assistance to their docs. Its a great way to get quick answers and pointers in the right direction. The AI assistant has been tremendously helpful to me and I hope you find it helpful as well. To configure the input for your actor, i did this
+
+```python
+actor_input = await Actor.get_input() or {}
+start_urls = actor_input.get("startUrls", [])
+```
+This reads the actor's input which is a json object and retrieves a list which contains the input urls.
+
+```python
+urls_list = []
+for start_url in start_urls:
+    if "requestsFromUrl" in start_url:
+        response = requests.get(start_url["requestsFromUrl"])
+        urls_list.extend(response.text.splitlines())
+    else:
+        urls_list.append(start_url["url"])
+```
+A user can provide the input urls in the form of a text file which contains urls separated by a newline or he can specify urls individually in the input form. The `if` block handles the user upload a text file containing the input while the `else` block here handles the user input provided through the input UI (which can be a form or a json). In addition to reading the input in your code, you also need to configure a `json` file named `input_schema.json` and put that inside the `.actor` folder at root. This file tells Apify what to show the user to input. Here is the minimum version of your `input_schema.json` file
+
+```json
+{
+    "title": "bizsleuth input",
+    "description": "This is the input for the bizsleuth actor.",
+    "type": "object",
+    "schemaVersion": 1,
+    "properties": {
+        "startUrls": {
+            "title": "Start URLs",
+            "type": "array",
+            "description": "URLs to start with",
+            "editor": "requestListSources",
+            "prefill": [
+                { "url": "https://www.example.com" },
+                { "url": "https://www.example.com/some-path" }
+            ]
+        }
+    }
+}
+```
+This schema shows the user that the actor expects an array of urls and he can use multiple ways to enter his input.
+![Alt text](/assets/images/actor_input_schema.png)
+
+After you have configured the input for your actor, then comes the part where you define output and you have to configure two json files for that, `dataset_schema.json` and `output_schema.json`. The `dataset_schema.json` file provides validation for your output. Here you specify the output fields for your actor with their expected datatypes. For example see my `dataset_schema` file
+
+```json
+{
+    "actorSpecification": 1,
+    "fields": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+            "business_name": {
+                "type": ["string", "null"]
+            },
+            "business_owner_name": {
+                "type": ["string", "null"]
+            },
+            "contact_email": {
+                "type": ["string", "null"]
+            }
+        }
+    }
+}
+```
+This specifies that the expected output contains 3 fields and each field has type *string* or *null*. If any other data type of field is pushed to the output, the Apify API will return *400* error code and discard the output.
+
+The `output_schema.json` is what actually shapes the output tab in the Apify console
+```json
+{
+    "actorOutputSchemaVersion": 1,
+    "title": "Output schema of bizsleuth",
+    "properties": {
+        "business_name": {
+            "type": "string",
+            "title": "Business Name 🏢",
+            "template": "{{links.apiDefaultDatasetUrl}}/items?view=business_name"    
+        },
+        "business_owner_name": {
+            "type": "string",
+            "title": "Business Owner Name 👤",
+            "template": "{{links.apiDefaultDatasetUrl}}/items?view=business_owner_name"
+        },
+        "contact_email": {
+            "type": "string",
+            "title": "Contact Email 📧",
+            "template": "{{links.apiDefaultDatasetUrl}}/items?view=contact_email"
+        }
+
+    }
+}
+```
+The `{{links.apiDefaultDatasetUrl}}` gets replaced by your actual actor dataset url at runtime and the `/items` provides an endpoint to access or view the items or fields in your output. As you can see, you can also set icon for each field respectively and it will be displayed in the output tab. 
+
+
+
 
 
