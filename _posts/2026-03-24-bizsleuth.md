@@ -71,7 +71,7 @@ A user can provide the input urls in the form of a text file which contains urls
 }
 ```
 This schema shows the user that the actor expects an array of urls and he can use multiple ways to enter his input.
-![Alt text](/assets/images/actor_input_schema.png)
+![Alt text](/assets/images/bizsleuth/actor_input_schema.png)
 
 After you have configured the input for your actor, then comes the part where you define output and you have to configure two json files for that, `dataset_schema.json` and `output_schema.json`. The `dataset_schema.json` file provides validation for your output. Here you specify the output fields for your actor with their expected datatypes. For example see my `dataset_schema` file
 
@@ -122,7 +122,43 @@ The `output_schema.json` is what actually shapes the output tab in the Apify con
     }
 }
 ```
-The `{{links.apiDefaultDatasetUrl}}` gets replaced by your actual actor dataset url at runtime and the `/items` provides an endpoint to access or view the items or fields in your output. As you can see, you can also set icon for each field respectively and it will be displayed in the output tab. 
+The `{{links.apiDefaultDatasetUrl}}` gets replaced by your actual actor dataset url at runtime and the `/items` provides an endpoint to access or view the items or fields in your output. As you can see, you can also set icon for each field and it will be displayed in the output tab. 
+
+After configuring your input and output schemas as above, you also need to configure 1 other file called `actor.json`. This file is essential because it contains metadata about your actor which gives identity to your actor on the Apify platform. It contains the name and version of your actor and links the input and output schema files.
+```json
+{
+    "actorSpecification": 1,
+    "name": "bizsleuth",
+    "version": "0.0",
+    "input": "./input_schema.json",
+    "required": ["startUrls"],
+    "output": "./output_schema.json",
+    "storages": {
+        "dataset": "./dataset_schema.json"
+    }
+}
+```
+This defines your actor name and its version and also lists the path of the input and output schema files you defined earlier. 
+
+Apify runs an actor inside a container so you need to configure a Dockerfile as well. You can put the Dockerfile at the project root folder or inside the `.actor` folder but i like to keep it at the root folder. Depending upon your solution, you can choose a base image provided by Apify. For example, if your solution uses simple python and doesn't use a browser, you can start with `actor-python` base image. If it uses playwright, then you can start with `actor-python-playwright`. These [docker images](https://docs.apify.com/platform/actors/development/actor-definition/dockerfile) are optimised for the Apify platform.
+
+So once you have all the elements in place to turn your solution into an Apify [actor](https://docs.apify.com/platform/actors/development/actor-definition), there are 2 main ways to deploy your actor to Apify platform, using the *apify cli* or *linking a github repo*. Linking a github repo is the recommended approach and that is what I have used for my actor. Here is how to do so:
+
+**Step 1** — Go to the Apify console and click *Develop new* to start creating a new actor.
+
+![Alt text](/assets/images/bizsleuth/create_actor.png)
+
+**Step 2** — Select the *Github* option to link your repository.
+
+![Alt text](/assets/images/bizsleuth/2_link_repo.png)
+
+**Step 3** — Pick the repo that contains your actor code and confirm.
+
+![Alt text](/assets/images/bizsleuth/3_pick_repo.png)
+
+That's it! you have deployed your first actor. 
+
+
 
 
 
