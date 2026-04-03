@@ -2,6 +2,7 @@
 layout: design-post
 title: "How I Built and Monetized Bizsleuth: An AI-Powered Lead Enrichment Actor on Apify"
 tags: [ai, web-scraping, apify]
+published: false
 ---
 
 I was working with a sales team in SaaS company who provides services in the fitness industry. The team had thousands of leads data acquired through web scraping extensions or third-party data providers. These leads lacked some key information such as business owner, emails and phone numbers (partially missing) but had website urls so they had to manually open each url and find the missing info. That's when I decided to build Bizsleuth
